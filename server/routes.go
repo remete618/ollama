@@ -1701,7 +1701,7 @@ func (s *Server) GenerateRoutes(rc *ollama.Registry) (http.Handler, error) {
 	// Inference
 	r.GET("/api/ps", s.PsHandler)
 	r.POST("/api/generate", s.GenerateHandler)
-	r.POST("/api/chat", s.ChatHandler)
+	r.POST("/api/chat", middleware.MemoryMiddleware(), s.ChatHandler)
 	r.POST("/api/embed", s.EmbedHandler)
 	r.POST("/api/embeddings", s.EmbeddingsHandler)
 
