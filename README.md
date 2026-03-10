@@ -4,7 +4,102 @@
   </a>
 </p>
 
-# Ollama
+# Ollama + WideMemory
+
+### *Finally, a llama that doesn't pretend every conversation is the first one.*
+
+<dl>
+  <dt><b>Fork maintainer</b></dt><dd><a href="https://www.cioplea.com">Radu Cioplea</a></dd>
+  <dt><b>Email</b></dt><dd><a href="mailto:radu@cioplea.com">radu@cioplea.com</a></dd>
+  <dt><b>URL</b></dt><dd><a href="https://www.eyepaq.com">www.eyepaq.com</a></dd>
+  <dt><b>Timestamp</b></dt><dd>November 2025</dd>
+</dl>
+
+This is a fork of [Ollama](https://github.com/ollama/ollama) with an integrated persistent memory layer powered by [widemem-ai](https://github.com/remete618/widemem-ai) ([widemem.ai](https://widemem.ai)).
+
+<p align="center">
+  <a href="https://widemem.ai">
+    <img src="docs/images/widemem-ai-landing.png" alt="widemem.ai — Memory Infrastructure for LLM Agents" width="600"/>
+  </a>
+</p>
+
+## What this fork adds
+
+Standard Ollama has no memory between conversations. This fork adds a **memory middleware** that gives any local model long-term, intelligent memory — facts are extracted from conversations, stored locally, and automatically recalled in future chats.
+
+### How it works
+
+```
+User message → Memory Middleware → search widemem for relevant facts
+                                 → inject facts into system prompt
+                                 → forward to model (ChatHandler)
+                                 → store new facts from conversation (async)
+```
+
+**Key details:**
+- Opt-in via the `OLLAMA_MEMORY_URL` environment variable — without it, Ollama behaves exactly like upstream
+- Fails open: if the memory sidecar is down, chat works normally with no errors
+- Memory search adds ~2s latency; fact storage happens asynchronously after the response
+- Works on the native `/api/chat` endpoint
+- All data stays local — no cloud calls required
+
+### Files changed from upstream
+
+| File | Change |
+|------|--------|
+| `middleware/memory.go` | New — Go middleware that intercepts `/api/chat`, queries the widemem sidecar for relevant memories, injects them as a system message, and stores new facts asynchronously |
+| `server/routes.go` | One line — added `middleware.MemoryMiddleware()` before `s.ChatHandler` on the `/api/chat` route |
+
+### Setup
+
+**1. Install and start the [widemem-ai](https://widemem.ai) sidecar:**
+
+```bash
+pip install widemem-ai[server,ollama,sentence-transformers]
+python -m widemem.server
+# Runs on port 11435 by default
+```
+
+**2. Build and run this Ollama fork with memory enabled:**
+
+```bash
+cd ollama
+OLLAMA_MEMORY_URL=http://localhost:11435 go run . serve
+```
+
+**3. Chat — memories persist across conversations:**
+
+```bash
+# First conversation
+curl http://localhost:11434/api/chat -d '{
+  "model": "llama3.2",
+  "messages": [{"role": "user", "content": "My name is Radu and I live in Bucharest"}],
+  "stream": false
+}'
+
+# Later conversation — the model will remember
+curl http://localhost:11434/api/chat -d '{
+  "model": "llama3.2",
+  "messages": [{"role": "user", "content": "Where do I live?"}],
+  "stream": false
+}'
+```
+
+### Configuration
+
+| Environment variable | Default | Description |
+|---------------------|---------|-------------|
+| `OLLAMA_MEMORY_URL` | *(unset — memory disabled)* | URL of the widemem sidecar |
+| `WIDEMEM_LLM_PROVIDER` | `ollama` | LLM provider for fact extraction |
+| `WIDEMEM_LLM_MODEL` | `llama3.2` | Model used for fact extraction |
+| `WIDEMEM_EMBEDDING_PROVIDER` | `sentence-transformers` | Embedding provider (local, no API key) |
+| `WIDEMEM_DATA_PATH` | `~/.widemem/data` | Where memories are stored on disk |
+
+---
+
+*Everything below is the original Ollama README.*
+
+---
 
 Start building with open models.
 
